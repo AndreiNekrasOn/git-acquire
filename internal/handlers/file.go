@@ -43,20 +43,37 @@ func findFileById(id int) *models.File {
 }
 
 func assignFileToDev(name string, fileId int) {
-	if _, exists := storage.Developers[name]; !exists {
-		storage.Developers[name] = &models.Developer{
-			Name:  name,
-			Files: []int{},
-		}
+	for _, dev := range storage.Developers {
+		removeFileFromDev(dev, fileId)
 	}
-	// Assign file to developer
+	if (len(name) == 0) {
+		return
+	}
+	if _, exists := storage.Developers[name]; !exists {
+		storage.Developers[name] = &models.Developer{ Name:  name, Files: []int{}, }
+	}
 	developer := storage.Developers[name]
-	for _, assignedFile := range developer.Files {
-		if assignedFile == fileId {
-			return
-		}
+	if hasDevFile(developer, fileId) {
+		return
 	}
 	developer.Files = append(developer.Files, fileId)
+}
+
+func removeFileFromDev(developer *models.Developer, fileId int) {
+	for id, assignedFile := range developer.Files {
+		if assignedFile == fileId {
+			developer.Files = append(developer.Files[:id], developer.Files[id+1:]...)
+		}
+	}
+}
+
+func hasDevFile(developer *models.Developer, fileId int) bool {
+	for _, assignedFile := range developer.Files {
+		if assignedFile == fileId {
+			return true
+		}
+	}
+	return false
 }
 
 func AssignFiles(c *gin.Context) {
@@ -90,7 +107,9 @@ func DeleteFile(c *gin.Context) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	// TODO: also remove file from developer
+	for _, dev := range storage.Developers {
+		removeFileFromDev(dev, id)
+	}
 	for i, file := range storage.Files {
 		if file.ID == id {
 			storage.Files = append(storage.Files[:i], storage.Files[i+1:]...)
