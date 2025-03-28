@@ -22,7 +22,7 @@ func SetupRouter() *gin.Engine {
 	r.GET("/files", handlers.GetFiles)
 	r.POST("/files", handlers.AddFile)
 	r.PUT("/files/:id", handlers.UpdateFileDeveloper)
-	r.PUT("/developers/:id", handlers.AssignFileToDeveloper)
+	r.DELETE("/files/:id", handlers.DeleteFile)
 	r.GET("/developers", handlers.GetDevelopers)
 
 

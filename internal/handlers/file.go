@@ -13,12 +13,10 @@ import (
 var idCounter = 1
 var mutex = &sync.Mutex{}
 
-// Get all files
 func GetFiles(c *gin.Context) {
 	c.JSON(http.StatusOK, storage.Files)
 }
 
-// Add a new file
 func AddFile(c *gin.Context) {
 	var file models.File
 	if err := c.ShouldBindJSON(&file); err != nil {
@@ -35,7 +33,7 @@ func AddFile(c *gin.Context) {
 	c.JSON(http.StatusCreated, file)
 }
 
-func AssignFileToDeveloper(c *gin.Context) {
+func UpdateFileDeveloper(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file ID"})
@@ -84,33 +82,29 @@ func AssignFileToDeveloper(c *gin.Context) {
 		}
 	}
 	developer.Files = append(developer.Files, id)
-
+	for i, file := range storage.Files {
+		if file.ID == id {
+			storage.Files[i].Developer = developer.Name
+		}
+	}
 	c.JSON(http.StatusOK, developer)
 }
 
-
-func UpdateFileDeveloper(c *gin.Context) {
+func DeleteFile(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file ID"})
 		return
 	}
 
-	var updateData struct {
-		Developer string `json:"developer"`
-	}
-
-	if err := c.ShouldBindJSON(&updateData); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
 	mutex.Lock()
 	defer mutex.Unlock()
+
+	// TODO: also remove file from developer
 	for i, file := range storage.Files {
 		if file.ID == id {
-			storage.Files[i].Developer = updateData.Developer
-			c.JSON(http.StatusOK, storage.Files[i])
+			storage.Files = append(storage.Files[:i], storage.Files[i+1:]...)
+			c.JSON(http.StatusOK, gin.H{"message": "File deleted"})
 			return
 		}
 	}
