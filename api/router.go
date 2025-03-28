@@ -21,11 +21,9 @@ func SetupRouter() *gin.Engine {
 	// Routes
 	r.GET("/files", handlers.GetFiles)
 	r.POST("/files", handlers.AddFile)
-	r.PUT("/files/:id", handlers.UpdateFileDeveloper)
 	r.DELETE("/files/:id", handlers.DeleteFile)
 	r.GET("/developers", handlers.GetDevelopers)
-
-
+	r.POST("/assign", handlers.AssignFiles)
 	return r
 }
 

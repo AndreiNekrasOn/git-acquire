@@ -33,61 +33,51 @@ func AddFile(c *gin.Context) {
 	c.JSON(http.StatusCreated, file)
 }
 
-func UpdateFileDeveloper(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file ID"})
-		return
-	}
-
-	var request struct {
-		Developer string `json:"developer"`
-	}
-
-	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	mutex.Lock()
-	defer mutex.Unlock()
-
-	// Check if file exists
-	var fileExists bool
-	for _, file := range storage.Files {
+func findFileById(id int) *models.File {
+	for i, file := range storage.Files {
 		if file.ID == id {
-			fileExists = true
-			break
+			return &storage.Files[i]
 		}
 	}
-	if !fileExists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
-		return
-	}
+	return nil
+}
 
-	// Add developer to storage if they don't exist
-	if _, exists := storage.Developers[request.Developer]; !exists {
-		storage.Developers[request.Developer] = &models.Developer{
-			Name:  request.Developer,
+func assignFileToDev(name string, fileId int) {
+	if _, exists := storage.Developers[name]; !exists {
+		storage.Developers[name] = &models.Developer{
+			Name:  name,
 			Files: []int{},
 		}
 	}
-
 	// Assign file to developer
-	developer := storage.Developers[request.Developer]
+	developer := storage.Developers[name]
 	for _, assignedFile := range developer.Files {
-		if assignedFile == id {
-			c.JSON(http.StatusOK, developer) // Already assigned, no need to update
+		if assignedFile == fileId {
 			return
 		}
 	}
-	developer.Files = append(developer.Files, id)
-	for i, file := range storage.Files {
-		if file.ID == id {
-			storage.Files[i].Developer = developer.Name
+	developer.Files = append(developer.Files, fileId)
+}
+
+func AssignFiles(c *gin.Context) {
+	var req struct {
+		Developer string `json:"developer"`
+		FileIds   []int  `json:"fileIds"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+	mutex.Lock()
+	defer mutex.Unlock()
+	for _, id := range req.FileIds {
+		file := findFileById(id)
+		if file != nil {
+			file.Developer = req.Developer
+			assignFileToDev(req.Developer, id)
 		}
 	}
-	c.JSON(http.StatusOK, developer)
+	c.JSON(http.StatusOK, gin.H{"message": "Files assigned successfully"})
 }
 
 func DeleteFile(c *gin.Context) {
