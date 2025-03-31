@@ -25,10 +25,10 @@ const DeveloperList = () => {
         <p>No developers assigned yet.</p>
       ) : (
         developers.map((dev) => (
-          <div key={dev.name} className="bg-white p-4 shadow rounded my-2">
+          <div key={dev.name} className="bg-white p-4 shadow rounded my-2 border">
             <h3 className="text-lg font-bold">{dev.name}</h3>
             <p className="text-gray-600">
-              <strong>Files:</strong> {dev.files.length > 0 ? dev.files.join(", ") : "None"}
+              <strong>Files:</strong> {dev.files?.length > 0 ? dev.files.join(", ") : "None"}
             </p>
           </div>
         ))

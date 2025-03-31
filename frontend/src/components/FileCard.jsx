@@ -12,7 +12,7 @@ const FileCard = ({ file, isSelected, onToggleSelection, onDelete }) => {
 		onClick={onToggleSelection}
 		>
 		<h3 className="text-lg font-bold">{file.name}</h3>
-		<p className="text-gray-600">Branch: {file.branch}</p>
+		<p className="text-gray-600">Id: {file.id}</p>
 		<p className="text-gray-600">Dev: {file.developer}</p>
 		</div>
 		{/* Delete Button */}

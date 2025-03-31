@@ -6,7 +6,6 @@ const FileList = () => {
   const [selectedFiles, setSelectedFiles] = useState([]); // Track selected files
   const [developer, setDeveloper] = useState("");
   const [fileName, setFileName] = useState("");
-  const [branch, setBranch] = useState("");
 
   useEffect(() => {
     fetchFiles();
@@ -24,7 +23,7 @@ const FileList = () => {
   };
 
   const addFile = async () => {
-    if (!fileName.trim() || !branch.trim()) return;
+    if (!fileName.trim()) return;
 
     try {
       const response = await fetch("http://localhost:8080/files", {
@@ -32,13 +31,12 @@ const FileList = () => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ name: fileName, branch }),
+        body: JSON.stringify({ name: fileName }),
       });
 
       if (!response.ok) throw new Error("Failed to add file");
 
       setFileName("");
-      setBranch("");
       fetchFiles(); // Refresh file list
     } catch (error) {
       console.error("Error adding file:", error);
@@ -98,13 +96,6 @@ const FileList = () => {
           placeholder="File name"
           value={fileName}
           onChange={(e) => setFileName(e.target.value)}
-          className="p-2 border rounded mr-2"
-        />
-        <input
-          type="text"
-          placeholder="Branch"
-          value={branch}
-          onChange={(e) => setBranch(e.target.value)}
           className="p-2 border rounded mr-2"
         />
         <button

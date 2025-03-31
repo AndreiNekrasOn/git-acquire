@@ -45,3 +45,6 @@ playground-temp
 temp
 TODOs.md
 .eslintcache
+
+# SQLite
+*.db

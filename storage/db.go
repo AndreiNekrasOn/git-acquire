@@ -1,96 +1,197 @@
 package storage
 
 import (
+	"database/sql"
 	"errors"
+	"log"
 	"myapp/internal/models"
 	"sync"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 var (
-	Files  = []models.File{}
-	mutex  = &sync.Mutex{}
-	Developers = make(map[string]*models.Developer) // New storage
+	DB   *sql.DB
+	mutex = &sync.Mutex{}
 )
 
-// InitDB initializes fake data (optional)
+// InitDB initializes SQLite database
 func InitDB() {
-	mutex.Lock()
-	defer mutex.Unlock()
-	Files = []models.File{} // Empty DB on start
+	var err error
+	DB, err = sql.Open("sqlite3", "./devtracker.db")
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
+	_, err = DB.Exec("PRAGMA foreign_keys = ON;")
+	if err != nil {
+		log.Fatal("Failed to enable foreign keys:", err)
+	}
+	// Create tables if they don't exist
+	createTables()
 }
 
+// createTables ensures the tables exist in the database
+func createTables() {
+	query := `
+	CREATE TABLE IF NOT EXISTS files (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL
+	);
+	CREATE TABLE IF NOT EXISTS devs (
+		name TEXT PRIMARY KEY
+	);
+	CREATE TABLE IF NOT EXISTS file2dev (
+		file_id INTEGER NOT NULL,
+		dev_name TEXT NOT NULL,
+		UNIQUE(file_id, dev_name),
+		FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE CASCADE,
+		FOREIGN KEY (dev_name) REFERENCES devs (name) ON DELETE CASCADE
+	);
+	`
+	_, err := DB.Exec(query)
+	if err != nil {
+		log.Fatal("Failed to create tables:", err)
+	}
+}
+
+// GetFiles retrieves all files from the database
 func GetFiles() []models.File {
-	return Files
+	rows, err := DB.Query(`
+	SELECT f.id, f.name, d.name FROM files f
+	LEFT JOIN file2dev f2d on f2d.file_id = f.id
+	LEFT JOIN devs d on d.name = f2d.dev_name;
+	`)
+	files := []models.File{}
+	if err != nil {
+		log.Println("Error retrieving files:", err)
+		return files
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var file models.File
+		var dev sql.NullString;
+		err := rows.Scan(&file.ID, &file.Name, &dev)
+		if dev.Valid {
+			file.Developer = dev.String;
+		}
+		if err != nil {
+			log.Println("Error scanning file:", err)
+			continue
+		}
+		files = append(files, file)
+	}
+	log.Println(files)
+	return files
 }
 
+// AddFile inserts a new file into the database
 func AddFile(file *models.File) {
-	Files = append(Files, *file)
-}
-
-func FindFileById(id int) *models.File {
-	for i, file := range Files {
-		if file.ID == id {
-			return &Files[i]
-		}
-	}
-	return nil
-}
-
-func RemoveFileFromDev(developer *models.Developer, fileId int) {
-	for id, assignedFile := range developer.Files {
-		if assignedFile == fileId {
-			developer.Files = append(developer.Files[:id], developer.Files[id+1:]...)
-		}
+	_, err := DB.Exec("INSERT INTO files (name) VALUES (?);", file.Name)
+	if err != nil {
+		log.Println("Error inserting file:", err)
 	}
 }
 
-func RemoveFileFromAll(fileId int) {
-	for _, dev := range Developers {
-		RemoveFileFromDev(dev, fileId)
+func fileHasDev(id int) *models.File {
+	var file models.File
+	err := DB.QueryRow(`SELECT f2d.file_id FROM file2dev f2d WHERE f2d.file_id = ?;`, id).Scan(&file.ID)
+	if err != nil {
+		return nil
 	}
-}
-
-func GetDeveloperByName(name string) *models.Developer {
-	if _, exists := Developers[name]; !exists {
-		Developers[name] = &models.Developer{ Name:  name, Files: []int{}, }
-	}
-	return Developers[name]
-}
-
-func assignFile(devName string, fileId int) {
-	RemoveFileFromAll(fileId)
-	if (len(devName) == 0) {
-		return
-	}
-	developer := GetDeveloperByName(devName)
-	developer.Files = append(developer.Files, fileId)
+	return &file
 }
 
 func AssignFiles(devName string, fileIds []int) {
+	// AssignFiles updates file ownership
+	mutex.Lock()
+	defer mutex.Unlock()
+	log.Println(fileIds)
+	_ = GetDeveloperByName(devName)
 	for _, id := range fileIds {
-		file := FindFileById(id)
-		if file != nil {
-			file.Developer = devName
-			assignFile(devName, id)
+		file := fileHasDev(id)
+		var query string;
+		if file == nil {
+			query = "INSERT INTO file2dev (dev_name, file_id) VALUES (?, ?)"
+		} else {
+			query = "UPDATE file2dev SET dev_name = ? WHERE file_id = ?"
+		}
+		log.Println("Running query: ", query)
+		log.Println("for file: ", file)
+		_, err := DB.Exec(query, devName, id)
+		if err != nil {
+			log.Println("Error assigning file:", err)
 		}
 	}
 }
 
+// DeleteFile removes a file from the database
 func DeleteFile(fileId int) error {
-	RemoveFileFromAll(fileId)
-	for i, file := range Files {
-		if file.ID == fileId {
-			Files = append(Files[:i], Files[i+1:]...)
-			return nil
-		}
+	mutex.Lock()
+	defer mutex.Unlock()
+	result, err := DB.Exec("DELETE FROM files WHERE id = ?;", fileId)
+	if err != nil {
+		return errors.New("failed to delete file")
 	}
-	return errors.New("File not found")
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return errors.New("file not found")
+	}
+
+	return nil
 }
 
+// GetDevelopers retrieves all developers
 func GetDevelopers() []models.Developer {
 	developers := []models.Developer{}
-	for _, dev := range Developers {
-		developers = append(developers, *dev)
+	rows, err := DB.Query(`
+	SELECT d.name, f.id, f.name FROM devs d
+	LEFT JOIN file2dev f2d on f2d.dev_name == d.name
+	LEFT JOIN files f on f.id == f2d.file_id;
+	`)
+	if err != nil {
+		log.Println("Error retrieving developers:", err)
+		return developers
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var dev models.Developer
+		var file models.File
+		err := rows.Scan(&dev.Name, &file.ID, &file.Name)
+		if err != nil {
+			log.Println("Error scanning developer:", err)
+			continue
+		}
+		contains := false
+		for _, d := range developers {
+			if d.Name == dev.Name {
+				contains = true
+				d.Files = append(d.Files, file.ID)
+			}
+		}
+		if !contains {
+			dev.Files = append(dev.Files, file.ID)
+			developers = append(developers, dev)
+		}
+		log.Println(developers)
 	}
 	return developers
 }
+
+// GetDeveloperByName fetches a developer or creates one
+func GetDeveloperByName(name string) *models.Developer {
+	var dev models.Developer
+	err := DB.QueryRow("SELECT name FROM devs WHERE name = ?;", name).Scan(&dev.Name)
+	if err != nil {
+		// Developer not found, create one
+		_, err := DB.Exec("INSERT INTO devs (name) VALUES (?);", name)
+		if err != nil {
+			log.Println("Error inserting developer:", err)
+			return nil
+		}
+		dev.Name = name
+	}
+	return &dev
+}
+
