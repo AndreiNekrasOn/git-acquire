@@ -43,9 +43,9 @@ const FileList = () => {
     }
   };
 
-  const deleteFile = async (fileId) => {
+  const deleteFile = async (fileName) => {
     try {
-      const response = await fetch(`http://localhost:8080/files/${fileId}`, {
+      const response = await fetch(`http://localhost:8080/files/${fileName}`, {
         method: "DELETE",
       });
 
@@ -57,11 +57,11 @@ const FileList = () => {
     }
   };
 
-  const toggleSelection = (fileId) => {
+  const toggleSelection = (fileName) => {
     setSelectedFiles((prevSelected) =>
-      prevSelected.includes(fileId)
-        ? prevSelected.filter((id) => id !== fileId) // Unselect if already selected
-        : [...prevSelected, fileId] // Select if not selected
+      prevSelected.includes(fileName)
+        ? prevSelected.filter((name) => name !== fileName) // Unselect if already selected
+        : [...prevSelected, fileName] // Select if not selected
     );
   };
 
@@ -78,7 +78,7 @@ const FileList = () => {
           "Content-Type": "application/json",
           "Authorization": 'Basic ' + authData,
         },
-        body: JSON.stringify({ developer, fileIds: selectedFiles }),
+        body: JSON.stringify({ developer: username, fileNames: selectedFiles }),
       });
       if (!response.ok) throw new Error("Failed to assign files");
       setDeveloper("");
@@ -114,13 +114,6 @@ const FileList = () => {
       {/* Assign Developer Form */}
       <div className="mb-4 p-4 bg-white shadow rounded">
         <h2 className="text-lg font-bold mb-2">Assign Files</h2>
-        <input
-          type="text"
-          placeholder="Developer name"
-          value={developer}
-          onChange={(e) => setDeveloper(e.target.value)}
-          className="p-2 border rounded mr-2"
-        />
         <button
           onClick={assignFiles}
           className="bg-green-500 text-white px-4 py-2 rounded"
@@ -134,11 +127,11 @@ const FileList = () => {
         {files.length > 0 ? (
           files.map((file) => (
             <FileCard
-              key={file.id}
+              key={file.name}
               file={file}
-              isSelected={selectedFiles.includes(file.id)}
-              onToggleSelection={() => toggleSelection(file.id)}
-              onDelete={() => deleteFile(file.id)}
+              isSelected={selectedFiles.includes(file.name)}
+              onToggleSelection={() => toggleSelection(file.name)}
+              onDelete={() => deleteFile(file.name)}
             />
           ))
         ) : (

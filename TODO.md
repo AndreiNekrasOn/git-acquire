@@ -1,2 +1,0 @@
-- [x] authentication
-- [ ] history of changes

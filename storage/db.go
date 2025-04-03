@@ -35,17 +35,16 @@ func InitDB() {
 func createTables() {
 	query := `
 	CREATE TABLE IF NOT EXISTS files (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT NOT NULL
+		name TEXT PRIMARY KEY
 	);
 	CREATE TABLE IF NOT EXISTS devs (
 		name TEXT PRIMARY KEY
 	);
 	CREATE TABLE IF NOT EXISTS file2dev (
-		file_id INTEGER NOT NULL,
+		file_name TEXT NOT NULL,
 		dev_name TEXT NOT NULL,
-		UNIQUE(file_id, dev_name),
-		FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE CASCADE,
+		UNIQUE(file_name, dev_name),
+		FOREIGN KEY (file_name) REFERENCES files (name) ON DELETE CASCADE,
 		FOREIGN KEY (dev_name) REFERENCES devs (name) ON DELETE CASCADE
 	);
 	CREATE TABLE IF NOT EXISTS users (
@@ -62,8 +61,8 @@ func createTables() {
 // GetFiles retrieves all files from the database
 func GetFiles() []models.File {
 	rows, err := DB.Query(`
-	SELECT f.id, f.name, d.name FROM files f
-	LEFT JOIN file2dev f2d on f2d.file_id = f.id
+	SELECT f.name, d.name FROM files f
+	LEFT JOIN file2dev f2d on f2d.file_name = f.name
 	LEFT JOIN devs d on d.name = f2d.dev_name;
 	`)
 	files := []models.File{}
@@ -76,7 +75,7 @@ func GetFiles() []models.File {
 	for rows.Next() {
 		var file models.File
 		var dev sql.NullString;
-		err := rows.Scan(&file.ID, &file.Name, &dev)
+		err := rows.Scan(&file.Name, &dev)
 		if dev.Valid {
 			file.Developer = dev.String;
 		}
@@ -98,32 +97,32 @@ func AddFile(file *models.File) {
 	}
 }
 
-func fileHasDev(id int) *models.File {
+func fileHasDev(name string) *models.File {
 	var file models.File
-	err := DB.QueryRow(`SELECT f2d.file_id FROM file2dev f2d WHERE f2d.file_id = ?;`, id).Scan(&file.ID)
+	err := DB.QueryRow(`SELECT f2d.file_name FROM file2dev f2d WHERE f2d.file_name= ?;`, name).Scan(&file.Name)
 	if err != nil {
 		return nil
 	}
 	return &file
 }
 
-func AssignFiles(devName string, fileIds []int) {
+func AssignFiles(devName string, fileNames []string) {
 	// AssignFiles updates file ownership
 	mutex.Lock()
 	defer mutex.Unlock()
-	log.Println(fileIds)
+	log.Println(fileNames)
 	_ = GetDeveloperByName(devName)
-	for _, id := range fileIds {
-		file := fileHasDev(id)
+	for _, name := range fileNames {
+		file := fileHasDev(name)
 		var query string;
 		if file == nil {
-			query = "INSERT INTO file2dev (dev_name, file_id) VALUES (?, ?)"
+			query = "INSERT INTO file2dev (dev_name, file_name) VALUES (?, ?)"
 		} else {
-			query = "UPDATE file2dev SET dev_name = ? WHERE file_id = ?"
+			query = "UPDATE file2dev SET dev_name = ? WHERE file_name = ?"
 		}
 		log.Println("Running query: ", query)
-		log.Println("for file: ", file)
-		_, err := DB.Exec(query, devName, id)
+		log.Println("for file: ", file, name)
+		_, err := DB.Exec(query, devName, name)
 		if err != nil {
 			log.Println("Error assigning file:", err)
 		}
@@ -131,28 +130,26 @@ func AssignFiles(devName string, fileIds []int) {
 }
 
 // DeleteFile removes a file from the database
-func DeleteFile(fileId int) error {
+func DeleteFile(name string) error {
 	mutex.Lock()
 	defer mutex.Unlock()
-	result, err := DB.Exec("DELETE FROM files WHERE id = ?;", fileId)
+	result, err := DB.Exec("DELETE FROM files WHERE name = ?;", name)
 	if err != nil {
 		return errors.New("failed to delete file")
 	}
-
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
 		return errors.New("file not found")
 	}
-
 	return nil
 }
 
 func GetDevelopers() []models.Developer {
 	developers := []models.Developer{}
 	rows, err := DB.Query(`
-	SELECT d.name, f.id, f.name FROM devs d
+	SELECT d.name, f.name FROM devs d
 	LEFT JOIN file2dev f2d on f2d.dev_name == d.name
-	LEFT JOIN files f on f.id == f2d.file_id;
+	LEFT JOIN files f on f.name == f2d.file_name;
 	`)
 	if err != nil {
 		log.Println("Error retrieving developers:", err)
@@ -160,23 +157,23 @@ func GetDevelopers() []models.Developer {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var dev models.Developer
 		var file models.File
-		err := rows.Scan(&dev.Name, &file.ID, &file.Name)
+		err := rows.Scan(&file.Developer, &file.Name)
 		if err != nil {
 			log.Println("Error scanning developer:", err)
 			continue
 		}
-		contains := false
-		for _, d := range developers {
-			if d.Name == dev.Name {
-				contains = true
-				d.Files = append(d.Files, file.ID)
+		curIdx := -1
+		for i, d := range developers {
+			if d.Name == file.Developer {
+				curIdx = i;
+				break
 			}
 		}
-		if !contains {
-			dev.Files = append(dev.Files, file.ID)
-			developers = append(developers, dev)
+		if curIdx != -1 {
+			developers[curIdx].Files = append(developers[curIdx].Files, file.Name)
+		} else {
+			developers = append(developers, models.Developer{Name: file.Developer, Files: []string{file.Name}})
 		}
 		log.Println(developers)
 	}
@@ -211,6 +208,7 @@ func ContainsUser(user string, password string) bool {
 func GetAccounts() gin.Accounts {
 	accounts := gin.Accounts{}
 	rows, err := DB.Query("SELECT name, password from users;")
+	defer rows.Close()
 	if err != nil {
 		log.Println("Error retrieving developers:", err)
 		return accounts
