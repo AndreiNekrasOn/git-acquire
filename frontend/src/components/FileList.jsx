@@ -68,10 +68,15 @@ const FileList = () => {
   const assignFiles = async () => {
     if (selectedFiles.length === 0) return;
     try {
+      let username = localStorage.getItem("username")
+      let password = localStorage.getItem("password")
+      let authData = window.btoa(username + ':' + password)
+      // let base64Data = `${username}:${password}`.toString('base64');
       const response = await fetch("http://localhost:8080/assign", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Authorization": 'Basic ' + authData,
         },
         body: JSON.stringify({ developer, fileIds: selectedFiles }),
       });

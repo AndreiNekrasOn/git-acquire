@@ -7,6 +7,7 @@ import (
 	"myapp/internal/models"
 	"sync"
 
+	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -46,6 +47,10 @@ func createTables() {
 		UNIQUE(file_id, dev_name),
 		FOREIGN KEY (file_id) REFERENCES files (id) ON DELETE CASCADE,
 		FOREIGN KEY (dev_name) REFERENCES devs (name) ON DELETE CASCADE
+	);
+	CREATE TABLE IF NOT EXISTS users (
+		name TEXT NOT NULL,
+		password TEXT NOT NULL
 	);
 	`
 	_, err := DB.Exec(query)
@@ -142,7 +147,6 @@ func DeleteFile(fileId int) error {
 	return nil
 }
 
-// GetDevelopers retrieves all developers
 func GetDevelopers() []models.Developer {
 	developers := []models.Developer{}
 	rows, err := DB.Query(`
@@ -193,5 +197,29 @@ func GetDeveloperByName(name string) *models.Developer {
 		dev.Name = name
 	}
 	return &dev
+}
+
+func ContainsUser(user string, password string) bool {
+	var correctPassword string
+	err := DB.QueryRow("SELECT password FROM users WHERE name = ?;", user).Scan(&correctPassword)
+	if err == nil {
+		return false
+	}
+	return correctPassword == password
+}
+
+func GetAccounts() gin.Accounts {
+	accounts := gin.Accounts{}
+	rows, err := DB.Query("SELECT name, password from users;")
+	if err != nil {
+		log.Println("Error retrieving developers:", err)
+		return accounts
+	}
+	for rows.Next() {
+		var user models.User
+		rows.Scan(&user.Name, &user.Password)
+		accounts[user.Name] = user.Password
+	}
+	return accounts
 }
 
